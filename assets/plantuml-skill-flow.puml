@@ -1,0 +1,27 @@
+@startuml
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+left to right direction
+
+actor "Codex user" as user
+
+rectangle "plantuml-skill" as skill {
+  component "Generate .puml" as puml
+  component "Host PlantUML CLI" as cli
+  component "Host plantuml.jar fallback" as jar
+}
+
+database "Local files\n.puml + PNG/SVG" as output
+cloud "Public Kroki\nexplicit approval only" as kroki #F8D7DA
+
+user --> puml : asks for diagram
+puml --> cli : default render
+puml --> jar : fallback
+cli --> output : local output
+jar --> output : local output
+puml ..> kroki : optional upload\nafter approval
+
+@enduml
