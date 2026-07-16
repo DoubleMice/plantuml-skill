@@ -1,32 +1,53 @@
-# Generating Diagrams from Existing Source Code
+# Generate diagrams from source code
 
-Use when the user points at real code and asks for a diagram *of it* —
-"class diagram of this module", "sequence diagram for this request handler",
-"component map of the repo", "ER diagram from these models".
+Use this playbook when the user asks for a diagram of a repository, module,
+request path, schema, or model. Base the result on the current checkout and
+state clearly when a relation is inferred rather than directly observed.
 
-**Core rule: read the code, don't guess.** Open the files, extract the real
-entities and relationships, and draw only what is actually there — mark
-anything inferred. Then render + validate via the normal Workflow Step 4–5 loop.
+## Map evidence to a diagram
 
-## Pick the diagram type from the code shape
-
-| What you're looking at | Diagram | Map to PlantUML |
+| Evidence | Diagram | PlantUML mapping |
 |---|---|---|
-| Classes / structs / interfaces | Class | each type → `class`; fields & methods → members; `extends` → `--\|>`; `implements` → `..\|>`; a held field → `*--` / `-->` |
-| One request / handler / call path | Sequence | each object or service → `participant`; each call → `->`; each return → `-->` |
-| Modules / packages / imports | Component | each module → `component` or `package`; each import/dependency → `-->` |
-| ORM models / SQL DDL | ER | each table or model → `entity`; columns → attributes; foreign keys → crow's-foot relations |
-| A status enum + transition functions | State | each status → a state; each transition → a labeled edge |
+| Classes, structs, interfaces | Class | types to `class`/`interface`; declared inheritance or realization to relation arrows |
+| One handler, request, or event path | Sequence | callers and callees to participants; observed calls to messages |
+| Modules, packages, imports, service wiring | Component | modules to components/packages; dependencies to labeled edges |
+| ORM models, migrations, SQL DDL | ER | tables to entities; columns and keys to attributes; declared FKs to cardinalities |
+| Status values plus transition logic | State | persistent statuses to states; allowed transitions to labeled edges |
+| Runtime manifests and deployment config | Deployment | processes, nodes, stores, and network boundaries to deployment elements |
 
-## Steps
+## Evidence workflow
 
-1. **Read** the relevant files with the file/search tools — never infer structure from file names alone.
-2. **Extract** entities + relationships into a short list and sanity-check it against the code before drawing.
-3. **Emit** `.puml` from that list, preserving the real identifiers. Keep member signatures concise (drop method bodies).
-4. **Scope large inputs** — one module/package per diagram. Split rather than cram (see `large-diagram-patterns` thinking); a 40-class god-diagram helps no one.
-5. **Render + validate** — Workflow Step 4–5.
+1. Check the current branch, dirty worktree, and relevant generated/vendor
+   boundaries before interpreting the repository.
+2. Locate authoritative files with search tools. Read definitions, construction
+   or wiring, call sites, configuration, and tests needed to establish each
+   important relation; do not infer architecture from filenames alone.
+3. Write a compact evidence ledger before drawing: element, relation, source
+   file, and whether it is direct or inferred.
+4. Pick one audience and abstraction level. Scope a large repository to one
+   subsystem or emit an overview plus separate detail diagrams.
+5. Preserve real identifiers where they aid traceability, while shortening
+   signatures and labels that do not change the model.
+6. Author, render, and visually inspect the diagram through the main workflow.
+7. Re-open the cited code after drafting and check that every arrow, cardinality,
+   transition, and boundary is defensible.
 
-## Example — Python classes → class diagram
+## Accuracy rules
+
+- A static call graph proves possible calls, not runtime order. Mark optional or
+  inferred sequence messages and do not invent returns.
+- An import proves a dependency, not necessarily a network call.
+- A field reference does not by itself prove composition or lifecycle ownership.
+- ORM relationships may differ from physical foreign keys. Prefer migrations or
+  DDL for database cardinality when available.
+- Tests and mocks can reveal intended behavior but may not prove production
+  wiring. Separate them visually or omit them from a production view.
+- Exclude vendored, generated, fixture, and build-output code by default unless
+  the user asks for it.
+
+## Minimal class example
+
+Given:
 
 ```python
 class Animal:
@@ -40,11 +61,10 @@ class Owner:
         self.pets: list[Animal] = []
 ```
 
-→
+Render only supported semantics:
 
 ```plantuml
 @startuml
-!theme plain
 abstract class Animal {
   +speak()
 }
@@ -55,6 +75,8 @@ class Owner {
   +pets : List<Animal>
 }
 Animal <|-- Dog
-Owner "1" o-- "*" Animal : owns
+Owner --> Animal : references
 @enduml
 ```
+
+Do not upgrade `Owner --> Animal` to composition without lifecycle evidence.

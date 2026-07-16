@@ -6,7 +6,9 @@ This skill helps Codex, Claude Code, OpenCode, and compatible local agents
 create PlantUML diagrams, save `.puml` source files, and render PNG/SVG output
 when host PlantUML dependencies are already installed. It is designed for
 security-sensitive engineering work: local rendering is the default, and public
-Kroki rendering is allowed only after explicit user approval.
+Kroki rendering is allowed only after explicit user approval. A bundled
+standard-library helper checks syntax, validates output, writes atomically, and
+forces PlantUML's network- and file-isolating `SANDBOX` security profile.
 
 ## Quick Install
 
@@ -45,9 +47,16 @@ under `~/.agents/skills` and `.agents/skills`.
 
 - Generates PlantUML source for sequence, component, class, ER, activity, state,
   use-case, C4, mind-map, and Gantt diagrams.
+- Applies a restrained default visual system with consistent typography,
+  spacing, grouping, and semantic blue/green/orange/red roles.
 - Renders to PNG or SVG with host-installed `plantuml` and Graphviz (`dot`).
 - Falls back to a host `plantuml.jar` when Java, Graphviz, and the jar are
   available.
+- Checks syntax before rendering, validates PNG/SVG structure, avoids replacing
+  a good artifact with a failed render, and strips embedded PlantUML source
+  metadata from locally rendered output.
+- Rejects remote-resource syntax and renders under PlantUML `SANDBOX`, blocking
+  URL and arbitrary local-file resource loading.
 - Extracts and renders PlantUML blocks embedded in Markdown.
 - Builds diagrams from existing source code by reading real code structure
   instead of inventing architecture.
@@ -80,8 +89,9 @@ Dependency by task:
 | Task | Required dependencies |
 |---|---|
 | Generate `.puml` source | None |
-| Render with host PlantUML CLI | `plantuml` and Graphviz (`dot`) |
-| Render with host PlantUML jar | Java, Graphviz (`dot`), and `plantuml.jar` |
+| Use the bundled local helper | Python 3 (standard library only) |
+| Render with host PlantUML CLI | `plantuml`; Graphviz (`dot`) for diagram types that need it |
+| Render with host PlantUML jar | Java, `plantuml.jar`; Graphviz (`dot`) when needed |
 | Render with public Kroki | `curl` plus explicit user approval |
 
 Install host rendering dependencies:
@@ -102,19 +112,26 @@ plantuml -version
 dot -V
 ```
 
-Render locally:
+Render locally with the bundled helper:
 
 ```bash
-plantuml -tpng diagram.puml
-plantuml -tsvg diagram.puml
+python3 /path/to/plantuml-skill/scripts/render_plantuml.py diagram.puml \
+  --format png --output diagram.png
+
+python3 /path/to/plantuml-skill/scripts/render_plantuml.py diagram.puml \
+  --format svg --output diagram.svg
 ```
 
-Manual jar fallback:
+Explicit local jar:
 
 ```bash
-PLANTUML_JAR=/path/to/plantuml.jar
-java -jar "$PLANTUML_JAR" -tpng diagram.puml
+python3 /path/to/plantuml-skill/scripts/render_plantuml.py diagram.puml \
+  --backend jar --jar /path/to/plantuml.jar --format png
 ```
+
+The helper renders only through host-local backends. It does not install
+dependencies or implement a hidden network fallback. Keep sources
+self-contained; local file includes are intentionally blocked.
 
 ## Rendering Policy
 
@@ -134,6 +151,7 @@ The skill should never silently upload diagram source to a public service.
 
 The PlantUML source for this overview is tracked at
 [`assets/plantuml-skill-flow.puml`](assets/plantuml-skill-flow.puml).
+It also serves as a rendered example of the skill's default visual language.
 
 ![PlantUML skill flow](assets/plantuml-skill-flow.svg)
 
@@ -156,6 +174,19 @@ Validate the skill metadata when the Codex skill creator tools are available:
 ```bash
 python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py" \
   "${CODEX_HOME:-$HOME/.codex}/skills/plantuml-skill"
+```
+
+Validate the helper and perform a real local smoke render from a repository
+checkout:
+
+```bash
+tmpdir="$(mktemp -d)"
+PYTHONPYCACHEPREFIX="$tmpdir/pycache" \
+  python3 -m py_compile scripts/render_plantuml.py
+python3 scripts/render_plantuml.py assets/plantuml-skill-flow.puml \
+  --format svg --output "$tmpdir/plantuml-skill-flow.svg"
+test -s "$tmpdir/plantuml-skill-flow.svg"
+rm -rf "$tmpdir"
 ```
 
 After installing or updating the skill, restart or reload the agent if its skill

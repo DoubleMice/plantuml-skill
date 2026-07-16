@@ -1,81 +1,68 @@
-# PlantUML Troubleshooting & Safe Subset
+# PlantUML troubleshooting
 
-Deep reference for the Step 5 self-check loop. Read this when a render returns
-an error or broken file and fixing the single flagged line did not resolve it.
+Read this reference after a renderer or visual-QA failure. Preserve the raw
+diagnostic, fix the smallest cause, and re-run syntax validation before render.
 
-Host PlantUML rendering uses the local `plantuml` command or a local
-`plantuml.jar` plus Graphviz. Two hard limits to remember:
+## Diagnostic order
 
-- **No remote includes.** Do not use a remote `!includeurl https://…`; use the
-  bundled `!include <C4/…>` standard-library form instead.
-- **Renderer stderr/stdout is the error channel.** On a syntax error, the host
-  renderer usually writes the offending line and reason to stderr/stdout.
+1. Confirm the intended source and backend: `plantuml -version`, `dot -V`, or
+   `java -jar /path/to/plantuml.jar -version`.
+2. Run the bundled helper and read both stdout and stderr. It executes
+   `-checkonly` before rendering.
+3. Fix the exact cited line. Check wrappers, balanced braces, quotes, and block
+   terminators.
+4. Remove version-sensitive styling or features only after the semantic source
+   is understood.
+5. Re-render and visually inspect. A PNG signature alone does not prove success:
+   some PlantUML versions can emit a valid PNG containing an error message.
 
-## What renders reliably on PlantUML (safe subset)
+## Reliable subset
 
-These diagram types and features are dependable through recent PlantUML
-renderers:
+- Sequence diagrams with balanced `alt`, `opt`, `loop`, `par`, and activation.
+- Component, package, class, object, deployment, use-case, activity, state, and
+  entity diagrams with modest styling.
+- Mind maps and Gantt diagrams with their matching start/end wrappers.
+- C4 standard-library includes only when the selected local distribution
+  provides them.
 
-- Sequence — including `alt` / `opt` / `loop` / `par` fragments and `activate` / `deactivate`
-- Component / package, with modest `skinparam` styling
-- Class, object, deployment, use case
-- Activity (the modern `start` … `stop` syntax)
-- State machines
-- ER / entity
-- C4 via the bundled `!include <C4/C4_Context|C4_Container|C4_Component>`
-- Mind map, Gantt
+Treat sprites, icon packs, remote includes, custom fonts, exotic shapes, and
+large `skinparam` blocks as optional and version-sensitive.
 
-Treat exotic shapes, heavy `skinparam` blocks, embedded sprites/icons, and
-custom fonts as **optional** — they are the first things to fail and the first
-things to drop when degrading (below).
+## Common failures
 
-## Failure-degradation ladder
+| Symptom | Likely cause | Targeted fix |
+|---|---|---|
+| Missing start/end error | Wrong or unmatched wrapper | Pair `@startuml`/`@enduml`, `@startmindmap`/`@endmindmap`, or `@startgantt`/`@endgantt` |
+| Error near a label | Smart quotes, unescaped text, or unbalanced quotes | Retype punctuation and quote the full label |
+| Error after a group | Missing `}` or `end` | Balance `package`/class braces and sequence/activity blocks |
+| C4 include not found | Local distribution lacks C4 or include name is wrong | Verify `<C4/C4_Context>` locally or translate to plain components; do not fetch remotely |
+| Graphviz executable missing | `dot` is unavailable for the selected diagram | Report the missing local dependency; install only when asked |
+| Output file is absent | Renderer failed, timed out, or emitted multiple diagrams | Read diagnostics; keep one diagram per `.puml` |
+| Text is boxes or mojibake | Host font lacks glyphs or source encoding is wrong | Keep UTF-8 and use an installed font only when necessary |
+| Layout is huge or cramped | Too many nodes, edges, or detail levels | Split by concern, reorder declarations, group, or change direction |
 
-If re-rendering after a targeted line fix still fails (or the layout is
-unusable), simplify in this order, re-running Step 4 after each step. Stop as
-soon as it renders:
+## Syntax reminders
 
-1. **Remove exotic shapes** — fall back to `rectangle` / `component` / `node`.
-2. **Strip styling** — delete `skinparam` blocks and `!theme`; render plain first.
-3. **Remove notes** — `note left/right/over` lines are a common parse trap.
-4. **Simplify labels** — drop special characters; wrap any remaining label in `"…"`.
-5. **Reduce edges** — cut redundant relationships; a smaller graph parses and lays out more reliably.
-6. **Switch engine** — if a feature simply isn't supported, render the core idea
-   in a simpler diagram type rather than forcing the current one.
+- Sequence: every `alt`, `opt`, `loop`, `par`, and `group` needs `end`; declare
+  participants in the desired left-to-right order.
+- Class: use `<|--` for inheritance, `<|..` for realization, `*--` for
+  composition, and `o--` for aggregation; quote multiplicities.
+- Activity: do not mix legacy `(*)` syntax with modern `start`/`stop`; close
+  every `if` with `endif`.
+- State: use `[*]` for initial/final pseudo-states; brace composite states.
+- ER: place crow's-foot cardinality between entities and put `--` alone as an
+  attribute separator.
+- Component: overlap is usually a layout problem, not a parser error.
 
-Re-add the dropped styling only once the structure renders cleanly.
+## Simplification ladder
 
-## Common syntax errors by diagram type
+After a targeted fix fails, simplify one layer at a time and re-render:
 
-### General (any diagram)
-- Missing `@startuml` / `@enduml` (or `@startmindmap` / `@startgantt`) wrapper.
-- Smart quotes / non-breaking spaces / tabs pasted from a doc or chat — retype the line.
-- Unbalanced `{ }` in `package` / `rectangle` / class bodies.
+1. replace unsupported shapes or includes with plain elements;
+2. remove theme and styling;
+3. remove or shorten notes and special-character-heavy labels;
+4. remove redundant edges;
+5. split the diagram or choose a simpler diagram type.
 
-### Sequence
-- `alt` / `opt` / `loop` / `par` / `group` each need a matching `end`.
-- Reversed arrow: `B <- A` sends *to* B's left; use `A -> B` for left-to-right intent.
-- Participants render in first-mention order — declare `participant` at the top to fix left-to-right order.
-
-### Class
-- Relationship glyphs: `<|--` inheritance, `*--` composition, `o--` aggregation, `..|>` realization. Mixing the dashes/heads silently changes meaning.
-- Multiplicities must be quoted: `User "1" --> "*" Order`.
-
-### Activity
-- Do not mix the legacy `(*)` syntax with the modern `start` / `:action;` / `stop` syntax in one diagram.
-- Every `if (…) then` needs `endif`; every `repeat` needs `repeat while`.
-
-### State
-- Use `[*]` for the initial/final pseudo-state; `[ ]` or `()` will fail.
-- Composite states need `state Name { … }` braces, not indentation.
-
-### ER / entity
-- Crow's-foot cardinality goes between the entities: `user ||--o{ order`.
-- Attribute block separator is `--` on its own line inside the `entity { }` body.
-
-### Component
-- Overlap/crowding is a layout symptom, not an error — add `together { }` or a direction hint (`left to right direction`) before assuming the source is wrong.
-
-### C4
-- "cannot include" → you used a remote `!includeurl` or a missing standard-library include; switch to the bundled `!include <C4/C4_Context>` and verify the host PlantUML version is recent.
-- Macro arity matters: `System(alias, "Label", "Description")` — a missing argument throws.
+Stop after three repair rounds and report the raw error rather than claiming a
+successful artifact.
